@@ -11,6 +11,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCurrentUser } from "@/lib/queries/auth";
+import { useCurrentWorkspace } from "@/lib/queries/workspace";
 
 function NavLink({ item, pathname }: { item: (typeof NAV_ITEMS)[number]; pathname: string }) {
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -34,6 +36,8 @@ function NavLink({ item, pathname }: { item: (typeof NAV_ITEMS)[number]; pathnam
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: user } = useCurrentUser();
+  const { data: workspace } = useCurrentWorkspace(Boolean(user));
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
@@ -50,14 +54,14 @@ export function Sidebar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center justify-between rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent/60">
-              <span className="truncate font-medium">Personal Workspace</span>
+              <span className="truncate font-medium">{workspace?.name ?? "Workspace"}</span>
               <ChevronsUpDown className="size-3.5 shrink-0 text-sidebar-foreground/50" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuItem disabled>Personal Workspace</DropdownMenuItem>
+            <DropdownMenuItem disabled>{workspace?.name ?? "Workspace"}</DropdownMenuItem>
             <DropdownMenuItem disabled className="text-muted-foreground">
-              Workspace switching lands with Phase 3 (auth & workspaces)
+              Multiple workspaces and switching between them are not implemented yet.
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

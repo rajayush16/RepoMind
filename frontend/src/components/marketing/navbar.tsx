@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Boxes } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { githubLoginUrl } from "@/lib/api-client";
 
 export function Navbar() {
   return (
@@ -30,10 +31,10 @@ export function Navbar() {
 
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/overview">Explore Demo</Link>
+            <Link href="/login">Sign in</Link>
           </Button>
           <Button size="sm" asChild>
-            <Link href="/repositories">Connect GitHub</Link>
+            <a href={githubLoginUrl()}>Connect GitHub</a>
           </Button>
         </div>
       </div>

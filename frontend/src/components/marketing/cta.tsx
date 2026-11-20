@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { githubLoginUrl } from "@/lib/api-client";
 
 export function Cta() {
   return (
@@ -13,13 +14,13 @@ export function Cta() {
       </p>
       <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
         <Button size="lg" asChild>
-          <Link href="/repositories">
+          <a href={githubLoginUrl()}>
             Connect GitHub
             <ArrowRight className="size-4" />
-          </Link>
+          </a>
         </Button>
         <Button size="lg" variant="outline" asChild>
-          <Link href="/overview">Explore Demo</Link>
+          <Link href="/login">Sign in</Link>
         </Button>
       </div>
     </section>

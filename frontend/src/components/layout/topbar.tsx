@@ -1,11 +1,12 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight, PanelRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
 } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -17,12 +18,33 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { labelForPathname } from "@/lib/route-labels";
 import { useUIStore } from "@/stores/ui-store";
+import { useCurrentUser, useLogout } from "@/lib/queries/auth";
+
+function initialsFor(name: string | null, email: string): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    return parts
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("");
+  }
+  return email.slice(0, 2).toUpperCase();
+}
 
 export function Topbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const setCommandPaletteOpen = useUIStore((state) => state.setCommandPaletteOpen);
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
   const sectionLabel = labelForPathname(pathname);
+  const { data: user } = useCurrentUser();
+  const logout = useLogout();
+
+  function handleLogout() {
+    logout.mutate(undefined, {
+      onSuccess: () => router.replace("/login"),
+    });
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/95 px-4">
@@ -60,19 +82,23 @@ export function Topbar() {
           <DropdownMenuTrigger asChild>
             <button className="flex items-center rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
               <Avatar className="size-8">
-                <AvatarFallback className="bg-secondary text-xs">RM</AvatarFallback>
+                {user?.github_avatar_url && <AvatarImage src={user.github_avatar_url} />}
+                <AvatarFallback className="bg-secondary text-xs">
+                  {user ? initialsFor(user.name, user.email) : "RM"}
+                </AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Signed-in account
+              {user?.email ?? "Signed-in account"}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>Profile</DropdownMenuItem>
             <DropdownMenuItem disabled>
-              Authentication lands in Phase 3
+              {user?.github_connected ? `GitHub: @${user.github_username}` : "GitHub not connected"}
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

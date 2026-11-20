@@ -16,8 +16,8 @@ export function Footer() {
         </div>
 
         <div className="flex gap-6 text-sm text-muted-foreground">
-          <Link href="/overview" className="hover:text-foreground">
-            Demo workspace
+          <Link href="/login" className="hover:text-foreground">
+            Sign in
           </Link>
           <a
             href="https://github.com/rajayush16/RepoMind"

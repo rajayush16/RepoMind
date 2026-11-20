@@ -24,12 +24,25 @@ Local dev environment note: Docker Desktop is not currently installed in the pri
 - [ ] Demo workspace with seeded sample data
 
 ## Phase 3 — Authentication & GitHub Integration
-- [ ] Email/password auth (registration, login, logout, session handling)
-- [ ] GitHub OAuth
-- [ ] Workspace + workspace membership model
-- [ ] Repository discovery via GitHub API
-- [ ] Secure (encrypted) GitHub token storage
-- [ ] Repository connect / list / delete
+- [x] Email/password auth (registration, login, logout, session handling via httpOnly
+      JWT cookies)
+- [x] GitHub OAuth (authorize redirect, CSRF state cookie, code exchange, account
+      upsert)
+- [x] Workspace + workspace membership model (personal workspace auto-created per user)
+- [x] Repository discovery via GitHub API (`GET /repositories/github/available`)
+- [x] Secure (Fernet-encrypted) GitHub token storage at rest
+- [x] Repository connect / list / delete
+- [x] Frontend: login/register pages, GitHub OAuth button, auth guard on `(app)`
+      routes, repositories page wired to real connect/discover/delete, topbar +
+      settings show the real signed-in user with a working logout
+- [ ] Workspace switching UI (multiple workspaces per user) — only a personal
+      workspace exists so far
+- [ ] End-to-end verification against a real Postgres instance (blocked: Docker not
+      installed locally; verified instead via an in-memory SQLite test harness — see
+      DEVELOPMENT_LOG.md)
+- [ ] Live GitHub OAuth round-trip verification (blocked: no registered GitHub OAuth
+      App / real client credentials in this environment; URL building, CSRF state,
+      and callback logic are unit-tested with mocked GitHub responses)
 
 ## Phase 4 — Indexing Pipeline
 - [ ] Celery worker setup
