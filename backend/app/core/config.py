@@ -9,6 +9,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     secret_key: str = "dev-only-insecure-secret-change-me"
     cors_origins: str = "http://localhost:3000"
+    frontend_base_url: str = "http://localhost:3000"
+
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 14
+    # Fernet key used to encrypt GitHub access tokens at rest. This dev default is
+    # intentionally insecure and must be overridden in any real deployment.
+    encryption_key: str = "AsWgao6SUezc8dx9TSbzoi4XJNCiQnXV3YTVirE5iiU="
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432
