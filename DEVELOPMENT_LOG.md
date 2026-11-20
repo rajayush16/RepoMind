@@ -334,8 +334,9 @@ Chronological record of feature-by-feature delivery. Each entry corresponds to o
   the generator opens its own session from, scoped to its own lifetime; this was
   caught by the SQLite-backed assistant-flow tests actually exercising the full
   streaming path, not by inspection.
-- **Commit**: pending (written just before committing).
-- **Push status**: pending.
+- **Commit**: `c07607c` — `feat: add AI Assistant (LLM provider abstraction, SSE streaming, conversations)`
+  (backend) and `7e07d7a` — `feat: add real AI Assistant chat UI with streaming and citations` (frontend)
+- **Push status**: both pushed to `origin/develop`.
 - **Limitations**: none of the four provider adapters have been verified against
   a real, live API (no API keys configured, no outbound network access in this
   environment) -- they're built to match each provider's publicly documented
@@ -344,4 +345,70 @@ Chronological record of feature-by-feature delivery. Each entry corresponds to o
   function, not a LangGraph graph (LangGraph is used for Phase 7's Bug
   Investigation agent instead, where the orchestration genuinely has multiple
   stages) -- see IMPLEMENTATION_PLAN.md for the reasoning.
+
+## 2026-11-20 — Backend + frontend: Phase 7 advanced agents (bug investigation, impact analysis, PR review, test generation + sandbox)
+
+- **Summary**: **Bug Investigation** -- a real LangGraph `StateGraph` (parse_issue
+  → find_related_symbols → trace_execution → evaluate_causes → prepare_findings),
+  the first genuine use of LangGraph in this project. Each stage persists an
+  `InvestigationStep` row for the timeline UI; if hybrid search finds no evidence
+  at all, the model is never called. **Impact Analysis** -- direct callers and
+  their files from the Neo4j graph only, with a plain caller-count risk heuristic;
+  no speculative AI commentary layered on top. **PR Review** -- fetches real PR
+  metadata/diffs via new GitHub API client functions, one structured LLM call
+  produces categorized findings, persisted as a preview; publishing is a
+  *separate* endpoint requiring `confirm: true`, never automatic. **Test
+  Generation + sandboxed execution** -- generates tests for a real, already-
+  indexed symbol, then runs them in ephemeral, network-disabled Docker containers
+  (non-root, read-only root FS, memory/CPU limits) built from two new prebuilt
+  sandbox images with pytest/Jest pre-installed; a test is never reported
+  "passed" unless a real container actually ran it and exited 0 -- when Docker
+  isn't reachable, it honestly reports `sandbox_unavailable`.
+- **Backend components added**: `models/{investigation,pull_request,
+  generated_test}.py`, `services/agents/{stack_trace,bug_investigation,pr_review,
+  test_generation,test_execution}.py`, `services/graph/impact.py`,
+  `services/sandbox/docker_runner.py`, `api/routes/{investigations,impact,
+  pull_requests,tests}.py`, `schemas/{investigation,impact,pull_request,
+  test_generation}.py`, new GitHub client functions (`get_pull_request`,
+  `get_pull_request_files`, `post_issue_comment`), 3 new Celery tasks, Alembic
+  migration `6cdb346f2ed4`, two new sandbox Dockerfiles.
+- **Frontend components added**: `app/(app)/{investigations,impact,pull-requests,
+  tests}/page.tsx` (all rewritten with real functionality),
+  `components/investigations/investigation-timeline.tsx`,
+  `components/pull-requests/finding-card.tsx`,
+  `lib/queries/{investigations,impact,pull-requests,test-generation}.ts`.
+- **Database**: `investigations`, `investigation_steps`, `pull_request_reviews`,
+  `review_findings`, `generated_tests`, `test_executions` tables added via
+  migration `6cdb346f2ed4`. Not yet applied to a real Postgres instance (Docker
+  still isn't installed here).
+- **Tests run**: `pytest` — 78 passed (27 new, across 8 new test files) covering
+  all four agents against the SQLite harness with a repository actually indexed
+  from a local git fixture, a deterministic fake LLM provider, and mocked GitHub
+  API calls; plus a genuinely real (not mocked) test of the sandbox's honest
+  degradation, since Docker truly isn't installed in this environment. Also
+  re-ran the complete suite against a from-scratch virtual environment installing
+  only from `requirements.txt` (confirmed the new `docker` SDK pin doesn't
+  conflict with anything). `npm run lint` clean, `npm run build` succeeds (15
+  routes). Caught and fixed three real bugs, none related to missing
+  infrastructure: (1) a Neo4j query parameter named `query` collided with
+  `AsyncSession.run()`'s own first positional argument of the same name, raising
+  a `TypeError` -- caught by a mocked-driver regression test, not live Neo4j. (2)
+  Joining multiple extracted stack-trace search terms into one space-separated
+  string for hybrid search, which could never match anything since the lexical/
+  symbol paths do substring matching -- fixed by querying each term
+  independently and merging/deduping results. (3) Assigning directly to an
+  unloaded SQLAlchemy relationship collection (`investigation.steps = []`)
+  implicitly lazy-loads the *existing* collection first (to diff against), which
+  is itself async I/O outside the async-aware context that requires, raising
+  `MissingGreenlet` -- fixed by constructing the response schema explicitly from
+  plain column attributes instead of touching the ORM relationship.
+- **Commit**: pending (written just before committing).
+- **Push status**: pending.
+- **Limitations**: none of the four agents' LLM-backed steps, nor PR review's
+  publish-to-GitHub call, have been verified against a real API (no API keys, no
+  outbound network access in this environment). JUnit test generation/execution
+  is not implemented (would need a compile step) -- requesting it returns
+  `unsupported_framework` honestly. The sandbox images
+  (`repomind-sandbox-python`/`repomind-sandbox-node`) have never actually been
+  built or run, since Docker isn't installed here.
 

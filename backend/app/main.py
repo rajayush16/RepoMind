@@ -1,7 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import architecture, assistant, auth, code, health, repositories, search, workspaces
+from app.api.routes import (
+    architecture,
+    assistant,
+    auth,
+    code,
+    health,
+    impact,
+    investigations,
+    pull_requests,
+    repositories,
+    search,
+    tests,
+    workspaces,
+)
 from app.core.config import get_settings
 from app.core.exceptions import RepoMindError, repomind_exception_handler
 from app.core.logging import configure_logging
@@ -35,6 +48,10 @@ def create_app() -> FastAPI:
     app.include_router(search.router, prefix="/api")
     app.include_router(architecture.router, prefix="/api")
     app.include_router(assistant.router, prefix="/api")
+    app.include_router(investigations.router, prefix="/api")
+    app.include_router(impact.router, prefix="/api")
+    app.include_router(pull_requests.router, prefix="/api")
+    app.include_router(tests.router, prefix="/api")
 
     return app
 

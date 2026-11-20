@@ -157,11 +157,53 @@ Local dev environment note: Docker Desktop is not currently installed in the pri
       dependency) scoped to its own lifetime.
 
 ## Phase 7 — Advanced Agents
-- [ ] Bug investigation agent + timeline UI
-- [ ] Change impact analysis (Neo4j-driven)
-- [ ] Pull request review agent (preview + explicit publish approval)
-- [ ] Test generation agent
-- [ ] Sandboxed Docker test execution
+- [x] Bug investigation agent + timeline UI -- a real LangGraph `StateGraph`
+      (parse_issue → find_related_symbols → trace_execution → evaluate_causes →
+      prepare_findings), the first genuine use of LangGraph in this project (the
+      Assistant's own flow is a direct async function instead; see Phase 6's
+      notes on why). Every stage persists an `InvestigationStep` row for the
+      timeline. If hybrid search finds no evidence at all, the model is never
+      called -- a deterministic "not enough evidence" result is recorded instead.
+- [x] Change impact analysis (Neo4j-driven) -- direct callers and the distinct
+      files they live in, both real, statically-discovered graph relationships;
+      deliberately no speculative AI commentary layered on top. Risk is a plain
+      caller-count heuristic (low/medium/high), not a model guess.
+- [x] Pull request review agent (preview + explicit publish approval) -- fetches
+      real PR metadata/diffs via the GitHub API, one structured LLM call produces
+      categorized findings (correctness/security/performance/maintainability/
+      testing/architecture), persisted as a preview. Publishing is a *second*,
+      separate endpoint requiring `confirm: true` in the request body, and the
+      frontend only offers it after the findings are already shown -- nothing is
+      ever posted to GitHub automatically.
+- [x] Test generation agent -- generates test code for a real, already-indexed
+      symbol (raises if the symbol doesn't exist rather than inventing one).
+- [x] Sandboxed Docker test execution -- ephemeral, network-disabled containers
+      (non-root user, read-only root filesystem, memory/CPU limits) built from two
+      new prebuilt images (`infrastructure/docker/sandbox-{python,node}.Dockerfile`)
+      with pytest/Jest pre-installed so no package install happens at run time.
+      **Verified for real in this environment** (not mocked): Docker genuinely
+      isn't installed here, so the "Docker unavailable" degradation path is
+      exercised against the real, absent Docker daemon, not a simulation. A test
+      is never reported as "passed" unless a real container actually ran it and
+      exited 0. JUnit isn't implemented (would need a compile step); requesting it
+      returns `unsupported_framework` honestly rather than attempting a
+      half-working implementation.
+- [ ] Live verification of the agents' LLM-backed steps (bug investigation's
+      root-cause analysis, PR review's findings, test generation's code) against a
+      real LLM API, and of PR review/publish against the real GitHub API (blocked:
+      no API keys, no outbound network access in this environment). What **is**
+      verified for real: the full orchestration/persistence logic for all four
+      agents against the SQLite harness with a repository actually indexed from a
+      local git fixture, using a deterministic fake LLM provider and mocked
+      GitHub API calls; and sandboxed execution's honest-degradation path against
+      the genuinely absent Docker daemon. Three real bugs were caught and fixed
+      along the way (see DEVELOPMENT_LOG.md): a Neo4j query parameter name
+      colliding with `AsyncSession.run()`'s own first positional argument;
+      joining multiple extracted search terms into one substring-matched query
+      string (which could never match anything); and assigning directly to an
+      unloaded SQLAlchemy relationship collection, which implicitly lazy-loads
+      the existing collection to diff against and raises `MissingGreenlet`
+      outside an async-aware context.
 
 ## Phase 8 — MCP & Observability
 - [ ] MCP server with scoped tools

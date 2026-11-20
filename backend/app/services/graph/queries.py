@@ -23,16 +23,19 @@ async def find_symbols_by_name(settings: Settings, repository_id: str, query: st
     driver = _driver(settings)
     try:
         async with driver.session() as session:
+            # Note: AsyncSession.run()'s own first positional parameter is itself
+            # named `query`, so the Cypher parameter below is named `search_term`
+            # instead to avoid colliding with it.
             result = await session.run(
                 """
                 MATCH (f:File {repository_id: $repo_id})-[:DEFINES]->(s:Symbol)
-                WHERE toLower(s.name) CONTAINS toLower($query)
+                WHERE toLower(s.name) CONTAINS toLower($search_term)
                 RETURN s.name AS name, s.type AS type, s.start_line AS start_line,
                        s.end_line AS end_line, f.path AS file_path
                 LIMIT $limit
                 """,
                 repo_id=repository_id,
-                query=query,
+                search_term=query,
                 limit=limit,
             )
             return [record.data() async for record in result]

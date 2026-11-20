@@ -97,6 +97,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       NEO4J_URI: bolt://neo4j:7687
       QDRANT_URL: http://qdrant:6333
+    # Test generation's sandboxed execution (app/services/sandbox/docker_runner.py)
+    # spawns ephemeral containers via the host's Docker daemon -- requires the
+    # repomind-sandbox-python/repomind-sandbox-node images to be built once first
+    # (see README's "Sandboxed test execution" section).
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

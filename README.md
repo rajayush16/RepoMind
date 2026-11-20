@@ -118,6 +118,17 @@ cd backend && pytest
 cd frontend && npm run lint && npm run build
 ```
 
+## Sandboxed test execution
+
+Test Generation runs LLM-generated test code only inside ephemeral, network-disabled Docker containers (`app/services/sandbox/docker_runner.py`) -- never in the backend/worker process itself. Build the sandbox images once before using it:
+
+```bash
+docker build -t repomind-sandbox-python -f infrastructure/docker/sandbox-python.Dockerfile .
+docker build -t repomind-sandbox-node -f infrastructure/docker/sandbox-node.Dockerfile .
+```
+
+Both images run as a non-root user with dependencies (pytest / Jest) pre-installed, so no package install happens at test-run time. If Docker (or these images) aren't available, execution honestly reports `sandbox_unavailable` instead of ever claiming a test passed without actually running it. Only `pytest` and `jest` are supported; JUnit (which needs a compile step) is not implemented yet.
+
 ## Troubleshooting
 
 - **Docker not installed / `docker compose` not found**: install [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and ensure the `docker` CLI is on PATH. Until then, the backend will boot but `/api/health` will report Postgres/Redis/Neo4j/Qdrant as `unreachable`.
@@ -126,6 +137,8 @@ cd frontend && npm run lint && npm run build
 - **LLM features return errors**: at least one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` must be set, or `OLLAMA_BASE_URL` pointed at a running Ollama instance. The full provider-agnostic LLM abstraction lands in Phase 6.
 - **`POST /repositories/{id}/index` returns 503**: the Celery broker (Redis) or no worker process is running. Start Redis and the worker (see step 3 above).
 - **Indexing succeeds but shows 0 "graph relationships" or 0 "embeddings"**: expected when Neo4j isn't running or `OPENAI_API_KEY` isn't set — both are best-effort steps that never fail the job; the Postgres-backed file/symbol index (`file_count`/`symbol_count` on the repository) is what must succeed. Start Neo4j and/or set `OPENAI_API_KEY`, then re-index.
+- **Test execution shows `sandbox_unavailable`**: Docker isn't reachable from the backend/worker process, or the `repomind-sandbox-python`/`repomind-sandbox-node` images haven't been built yet (see "Sandboxed test execution" above).
+- **Bug Investigation / PR Review / Test Generation return 422 "No LLM provider configured"**: same requirement as the AI Assistant — set at least one LLM provider's API key in `.env`.
 
 ## Deployment
 

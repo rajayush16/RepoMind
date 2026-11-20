@@ -101,3 +101,49 @@ async def test_repository_graph_produces_consistent_node_and_edge_ids(
     for source, target, _ in edge_pairs:
         assert source in node_ids
         assert target in node_ids
+
+
+class _RecordingSession:
+    """Mirrors neo4j.AsyncSession.run's real signature -- its first positional
+    parameter is itself named `query` -- so a caller that also passes a `query=`
+    keyword (a real bug caught in find_symbols_by_name) raises here exactly as it
+    would against the real driver."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+        self.calls: list[dict] = []
+
+    async def run(self, query: str, **kwargs):
+        self.calls.append(kwargs)
+        return _FakeResult(self._rows)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _RecordingDriver:
+    def __init__(self, session: _RecordingSession) -> None:
+        self._session = session
+
+    def session(self):
+        return self._session
+
+    async def close(self):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_find_symbols_by_name_does_not_collide_with_run_s_own_query_kwarg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _RecordingSession([{"name": "authenticate", "type": "function", "start_line": 1, "end_line": 2, "file_path": "auth.py"}])
+    monkeypatch.setattr(graph_queries, "_driver", lambda settings: _RecordingDriver(session))
+
+    results = await graph_queries.find_symbols_by_name(get_test_settings(), "repo-123", "auth")
+
+    assert results[0]["name"] == "authenticate"
+    assert session.calls[0]["search_term"] == "auth"
+    assert "query" not in session.calls[0]
