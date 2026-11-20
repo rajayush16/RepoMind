@@ -22,6 +22,8 @@ tree-sitter-typescript==0.23.2
 tree-sitter-java==0.23.5
 tree-sitter-cpp==0.23.4
 tree-sitter-go==0.25.0
+langgraph==1.2.24
+langchain-core==1.8.4
 pytest==8.3.4
 pytest-asyncio==0.25.0
 aiosqlite==0.22.1

@@ -115,11 +115,46 @@ Local dev environment note: Docker Desktop is not currently installed in the pri
       rendered as disconnected/invisible edges in the graph.
 
 ## Phase 6 — AI Assistant
-- [ ] LLM provider abstraction (OpenAI/Anthropic/Gemini/Ollama)
-- [ ] Streaming responses (SSE)
-- [ ] LangGraph planner/router workflow
-- [ ] Conversation persistence
-- [ ] Evidence verification / "insufficient evidence" handling
+- [x] LLM provider abstraction (OpenAI/Anthropic/Gemini/Ollama) -- a common
+      `LLMProvider` interface (`generate`, `generate_stream`, `generate_structured`,
+      `count_tokens`) with one real httpx-based adapter per provider. The registry
+      (`get_llm_provider`) never silently falls back to a different provider than
+      configured -- a missing key raises, it doesn't guess another provider.
+- [x] Streaming responses (SSE) -- real Server-Sent Events over a POST endpoint
+      (`token`/`done`/`error` events), consumed by a hand-rolled SSE-over-fetch
+      parser on the frontend since the browser's EventSource API can't do POST.
+- [x] Conversation persistence (`conversations`/`messages` tables, migration
+      `da32ba5a8376`) -- every message records which provider/model actually
+      produced it.
+- [x] Evidence verification / "insufficient evidence" handling -- citations are
+      never the model's own claims about itself; they are the real hybrid-search
+      results that were actually retrieved and fed into the prompt. When
+      retrieval finds nothing, the model is never even called -- a deterministic
+      fallback message is returned instead, so "insufficient evidence" can't be
+      talked around by the model.
+- [~] LangGraph planner/router workflow -- LangGraph is installed and used for
+      Phase 7's Bug Investigation agent (see below), but the Assistant's own
+      retrieve-then-stream flow is implemented as a direct async function, not a
+      LangGraph graph. Reasoning: LangGraph's graph execution doesn't map cleanly
+      onto token-by-token SSE streaming back to an HTTP client without extra
+      plumbing that wasn't worth it for a flow this linear (retrieve → stream →
+      verify-by-construction). LangGraph is used where the orchestration actually
+      has multiple distinct stages/conditional routing that benefit from it.
+- [ ] Live verification against a real LLM API (blocked: no OpenAI/Anthropic/
+      Gemini API key configured in this environment, and no outbound network
+      access either). What **is** verified for real: every provider adapter's
+      request construction and response/stream parsing, against `httpx.MockTransport`
+      standing in for each provider's publicly documented API shape (not a live
+      call -- these adapters have NOT been confirmed against the real, current
+      APIs); and the full retrieve → stream → persist → citation flow, with a
+      deterministic fake provider standing in for the real one, against the
+      SQLite harness with a repository actually indexed from a local git fixture.
+      This also caught and fixed a real bug: a `Depends(get_db)` session closes
+      right after a route function *returns*, which happens before a
+      `StreamingResponse` body is actually consumed -- the streaming generator
+      would have been writing to an already-closed session. Fixed by having the
+      generator open its own session (via an injectable session-factory
+      dependency) scoped to its own lifetime.
 
 ## Phase 7 — Advanced Agents
 - [ ] Bug investigation agent + timeline UI

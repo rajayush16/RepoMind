@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import Settings, get_settings
-from app.core.database import get_db
+from app.core.database import get_db, get_session_factory
 from app.main import app
 from app.models import Base
 
@@ -40,6 +40,7 @@ async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[get_settings] = get_test_settings
+app.dependency_overrides[get_session_factory] = lambda: TestSessionLocal
 
 
 @pytest_asyncio.fixture(autouse=True)

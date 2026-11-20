@@ -46,7 +46,11 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     ollama_base_url: str | None = None
     default_llm_provider: str = "anthropic"
-    default_llm_model: str = "claude-sonnet-5"
+    # None means "use that provider's own default model" (see services/llm/providers/*).
+    # Only set this when you want to override that default -- it is passed as-is
+    # regardless of which provider is selected, so e.g. an Anthropic model name
+    # here would be wrong if DEFAULT_LLM_PROVIDER=openai.
+    default_llm_model: str | None = None
 
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None

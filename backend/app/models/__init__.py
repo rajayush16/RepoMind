@@ -1,4 +1,5 @@
 from app.models.base import Base
+from app.models.conversation import Conversation, Message
 from app.models.indexing import CodeSymbol, IndexedFile, IndexingJob, IndexingJobStatus
 from app.models.repository import Repository
 from app.models.user import User
@@ -15,4 +16,6 @@ __all__ = [
     "IndexingJobStatus",
     "IndexedFile",
     "CodeSymbol",
+    "Conversation",
+    "Message",
 ]

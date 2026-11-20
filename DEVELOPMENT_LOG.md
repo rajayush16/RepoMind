@@ -268,12 +268,80 @@ Chronological record of feature-by-feature delivery. Each entry corresponds to o
   made every call edge silently invisible in the rendered graph; also hit (and
   worked around) a missing `colorMode` prop on the installed `@xyflow/react`
   version during the frontend build.
-- **Commit**: pending (written just before committing).
-- **Push status**: pending.
+- **Commit**: `de4243b` — `feat: add Code Explorer, hybrid retrieval, and architecture graph`
+- **Push status**: pushed to `origin/develop`.
 - **Limitations**: the vector and graph retrieval paths, and the architecture
   graph's real data, are not exercised against a live Qdrant/Neo4j (Docker not
   installed) -- verified instead via the SQLite-backed lexical/symbol paths and a
   mocked-driver unit test for the graph-shaping logic. No demo/sample repository;
   Code Explorer and Architecture Graph only show data for a repository you've
   actually connected and indexed yourself.
+
+## 2026-11-20 — Backend + frontend: AI Assistant (LLM providers, SSE, conversations)
+
+- **Summary**: A common `LLMProvider` interface (`generate`, `generate_stream`,
+  `generate_structured`, `count_tokens`) with one real httpx-based adapter each for
+  OpenAI, Anthropic, Gemini, and Ollama (no heavy SDKs -- consistent with how
+  GitHub/Qdrant are called elsewhere in this codebase). Each adapter takes an
+  injectable `httpx.Transport` purely for testability. The registry
+  (`get_llm_provider`) never silently falls back to a different provider than
+  `DEFAULT_LLM_PROVIDER` -- a missing API key raises instead of guessing another
+  provider. New `conversations`/`messages` tables (migration `da32ba5a8376`), each
+  message recording which provider/model actually produced it. The orchestrator
+  (`services/assistant/orchestrator.py`) retrieves evidence via Phase 5's hybrid
+  search, and -- critically -- the citations persisted are that real retrieved
+  evidence, never anything the model claims about itself, so they can't be
+  hallucinated; when retrieval finds nothing, the model is never even called, and
+  a deterministic "insufficient evidence" message is returned instead. Real
+  Server-Sent Events streaming over a POST endpoint (`token`/`done`/`error`
+  events). Frontend: a working chat UI (conversation list, streaming message
+  bubbles, citation chips that deep-link to the Code Explorer at the cited
+  file/line via a new `?file=&line=` query param on that page) using a hand-rolled
+  SSE-over-fetch parser, since the browser's `EventSource` API can't send POST
+  requests.
+- **Backend components added**: `services/llm/base.py`,
+  `services/llm/providers/{openai,anthropic,gemini,ollama}.py`,
+  `services/llm/registry.py`, `services/assistant/orchestrator.py`,
+  `models/conversation.py`, `api/routes/assistant.py`,
+  `schemas/conversation.py`, `core/database.get_session_factory`, Alembic
+  migration `da32ba5a8376`. Also fixed `default_llm_model`'s config default, which
+  was hardcoded to an Anthropic model name and would have been silently (and
+  wrongly) applied to whichever provider was actually selected.
+- **Frontend components added**: `app/(app)/assistant/page.tsx` (rewritten),
+  `components/assistant/{conversation-list,message-bubble,citation-chip}.tsx`,
+  `components/explorer/explorer-view.tsx` (Explorer page's content moved here so
+  it could read a `?file=` deep-link query param), `lib/{stream-ask}.ts`,
+  `lib/queries/assistant.ts`.
+- **Database**: `conversations`, `messages` tables added via migration
+  `da32ba5a8376`. Not yet applied to a real Postgres instance (Docker still isn't
+  installed here).
+- **Tests run**: `pytest` — 51 passed (13 new: 10 provider-adapter tests against
+  `httpx.MockTransport` covering OpenAI/Anthropic/Gemini/Ollama request
+  construction and streaming-response parsing plus the registry's
+  never-silently-falls-back behavior, and 3 full assistant-flow tests -- streaming
+  an answer and persisting real citations, skipping the model entirely when
+  retrieval finds nothing, and rejecting the request when no provider is
+  configured -- against the SQLite harness with a repository actually indexed
+  from a local git fixture, using a deterministic fake provider in place of a real
+  one. Also ran the complete suite against a from-scratch virtual environment
+  installing only from `requirements.txt` (51 passed), to confirm the newly added
+  `langgraph`/`langchain-core` pins don't conflict with anything else. `npm run
+  lint` clean, `npm run build` succeeds (15 routes). Caught and fixed a real bug in
+  this pass: a `Depends(get_db)` session closes right after a route function
+  *returns*, which happens before a `StreamingResponse` body is actually consumed
+  by the client -- the streaming generator would have been committing to an
+  already-closed session. Fixed with an injectable session-factory dependency that
+  the generator opens its own session from, scoped to its own lifetime; this was
+  caught by the SQLite-backed assistant-flow tests actually exercising the full
+  streaming path, not by inspection.
+- **Commit**: pending (written just before committing).
+- **Push status**: pending.
+- **Limitations**: none of the four provider adapters have been verified against
+  a real, live API (no API keys configured, no outbound network access in this
+  environment) -- they're built to match each provider's publicly documented
+  request/response shape from training knowledge, which may not exactly match the
+  current real API. The Assistant's retrieve-then-stream flow is a direct async
+  function, not a LangGraph graph (LangGraph is used for Phase 7's Bug
+  Investigation agent instead, where the orchestration genuinely has multiple
+  stages) -- see IMPLEMENTATION_PLAN.md for the reasoning.
 
