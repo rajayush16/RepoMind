@@ -111,6 +111,7 @@ async def run_indexing(
                         language=indexable.language,
                         size_bytes=len(content.encode("utf-8")),
                         content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                        content=content,
                         symbol_count=len(parsed.symbols),
                         last_indexed_commit_sha=commit_sha,
                     )

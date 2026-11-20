@@ -52,6 +52,9 @@ class IndexedFile(Base, TimestampMixin):
     language: Mapped[str] = mapped_column(String(32), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Raw source, capped at the same 1MB indexing size limit. Stored so the Code
+    # Explorer can serve it without re-cloning or re-hitting the GitHub API per view.
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     symbol_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_indexed_commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
 

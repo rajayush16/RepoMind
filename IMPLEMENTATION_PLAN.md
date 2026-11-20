@@ -90,10 +90,29 @@ Local dev environment note: Docker Desktop is not currently installed in the pri
       processes (git, tree-sitter, a real Celery worker boot).
 
 ## Phase 5 — Code Intelligence
-- [ ] Code explorer (file tree, Monaco, symbol navigation)
-- [ ] Hybrid retrieval (lexical + vector + symbol + graph, RRF fusion)
-- [ ] Architecture graph visualization (React Flow, backed by Neo4j)
-- [ ] Source citations wired to retrieval results
+- [x] Code explorer (real file tree built from indexed files, Monaco showing real
+      stored source, symbol outline with jump-to-line, a search box backed by the
+      real hybrid-search endpoint)
+- [x] Hybrid retrieval: lexical (portable `ILIKE` over symbol name/signature --
+      deliberately not Postgres-only `tsvector`/true BM25, so the same code path is
+      testable on SQLite too; a documented fidelity trade-off) + symbol (prefix
+      name match) + vector (Qdrant, best-effort) + graph (Neo4j, best-effort),
+      fused via Reciprocal Rank Fusion
+- [x] Architecture graph visualization (React Flow, backed by a real `GET
+      /repositories/{id}/graph` endpoint reading Neo4j; shows an honest "Neo4j
+      unreachable" empty state rather than fake nodes when it can't connect)
+- [x] Source citations wired to retrieval results (every search result carries its
+      real file path, line range, and which retrieval method(s) found it)
+- [ ] Live verification of the vector/graph retrieval paths and the architecture
+      graph against a real running Qdrant/Neo4j (blocked: Docker not installed).
+      What **is** verified for real: the lexical/symbol retrieval paths and the
+      Code Explorer's file/content/symbol endpoints, end-to-end against the SQLite
+      harness with a repository actually indexed from a local git fixture; and the
+      graph node/edge ID-consistency logic in `get_repository_graph`, via a test
+      with a mocked Neo4j driver -- this caught and fixed a real bug where CALLS
+      edges referenced node IDs (`name:{x}`) that didn't match any node the
+      endpoint actually returns (`symbol:{file}:{x}`), which would have silently
+      rendered as disconnected/invisible edges in the graph.
 
 ## Phase 6 — AI Assistant
 - [ ] LLM provider abstraction (OpenAI/Anthropic/Gemini/Ollama)

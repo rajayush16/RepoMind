@@ -202,8 +202,8 @@ Chronological record of feature-by-feature delivery. Each entry corresponds to o
   `shutil.rmtree(..., ignore_errors=True)` silently left cloned repos behind on
   Windows because git marks pack files read-only; switched to an `onerror` handler
   that clears the read-only bit and retries.
-- **Commit**: pending (written just before committing).
-- **Push status**: pending.
+- **Commit**: `d04d293` — `feat: add repository indexing pipeline (clone, Tree-sitter parsing, Celery)`
+- **Push status**: pushed to `origin/develop`.
 - **Limitations**: no live verification against real Postgres, Neo4j, Qdrant, or
   Redis+worker (Docker not installed); no outbound network access in this
   environment either, so GitHub cloning was verified against a local git fixture
@@ -211,4 +211,69 @@ Chronological record of feature-by-feature delivery. Each entry corresponds to o
   OpenAI API key configured, so embedding generation code is written but has never
   actually produced an embedding. True incremental (commit-diff) re-indexing is not
   implemented -- every run is a full re-index (idempotent, but not incremental).
+
+## 2026-11-20 — Frontend: wire repository cards to the indexing pipeline
+
+- **Summary**: `RepositoryCard` now has a real Index/Re-index button, polls the
+  indexing-job endpoint every 2s while a job is in progress, and surfaces the real
+  error message on failure.
+- **Frontend components added**: `lib/queries/indexing.ts`.
+- **Tests run**: `npm run lint` clean, `npm run build` succeeds.
+- **Commit**: `9153120` — `feat: wire frontend repository cards to the real indexing pipeline`
+- **Push status**: pushed to `origin/develop`.
+- **Limitations**: none beyond what Phase 4's backend entry already notes.
+
+## 2026-11-20 — Backend + frontend: Code Explorer, hybrid retrieval, architecture graph
+
+- **Summary**: Added a `content` column to `indexed_files` (capped at the same 1MB
+  indexing limit) so the Code Explorer can serve real source without re-cloning or
+  re-hitting the GitHub API per file view -- see Alembic migration `1f2ae4ba51cc`.
+  Built hybrid retrieval (`services/retrieval/hybrid.py`): lexical (portable
+  `ILIKE`, not Postgres-only `tsvector`, so it's testable on SQLite too) + symbol
+  (prefix match) + vector (Qdrant, best-effort) + graph (Neo4j, best-effort),
+  fused via Reciprocal Rank Fusion. New Neo4j query helpers
+  (`services/graph/queries.py`): `get_repository_graph` (nodes/edges for the
+  architecture view, honestly reporting `available: false` with a reason when
+  Neo4j is unreachable instead of returning fake data), `get_callers`,
+  `get_dependents` (the latter two will be reused for Phase 7 impact analysis).
+  New endpoints: `GET /repositories/{id}/files`, `GET
+  /repositories/{id}/files/content`, `GET /repositories/{id}/symbols`, `GET
+  /repositories/{id}/search`, `GET /repositories/{id}/graph`. Frontend: a real Code
+  Explorer (file tree built from indexed files, Monaco showing real stored source,
+  a symbol outline with jump-to-line, a search box backed by the real hybrid-search
+  endpoint) and a real Architecture Graph page (React Flow, fetching real nodes/
+  edges, with an honest empty state when Neo4j is unreachable rather than a fake
+  diagram). Added a shared repository-selector (Zustand store) used by both pages.
+- **Backend components added**: `services/retrieval/hybrid.py`,
+  `services/graph/queries.py`, `api/routes/{code,search,architecture}.py`,
+  `schemas/{code,search,graph}.py`, Alembic migration `1f2ae4ba51cc`.
+- **Frontend components added**: `app/(app)/explorer/page.tsx` (rewritten),
+  `app/(app)/architecture/page.tsx` (rewritten),
+  `components/explorer/{file-tree-view,symbol-outline}.tsx`,
+  `components/repositories/repository-selector.tsx`, `lib/{file-tree,
+  graph-layout,monaco-language}.ts`, `lib/queries/code.ts`,
+  `stores/repository-store.ts`.
+- **Database**: `indexed_files.content` column added via migration `1f2ae4ba51cc`.
+  Not yet applied to a real Postgres instance (Docker still isn't installed here).
+- **Tests run**: `pytest` — 38 passed (6 new: 5 Code Explorer/search/architecture
+  route tests running the real pipeline against the SQLite harness + a local git
+  fixture, confirming file listing, file content retrieval, symbol filtering,
+  lexical/symbol search results, and the architecture endpoint's honest
+  `available: false` when Neo4j is unreachable; 1 test with a mocked Neo4j driver
+  verifying `get_repository_graph`'s node/edge ID construction). `npm run lint`
+  clean, `npm run build` succeeds (15 routes). Caught and fixed one real bug in
+  this pass (not an infra-availability issue): the backend's CALLS edges
+  referenced node IDs (`name:{caller}`/`name:{callee}`) that never matched any
+  node the endpoint actually returns (`symbol:{file}:{name}`), which would have
+  made every call edge silently invisible in the rendered graph; also hit (and
+  worked around) a missing `colorMode` prop on the installed `@xyflow/react`
+  version during the frontend build.
+- **Commit**: pending (written just before committing).
+- **Push status**: pending.
+- **Limitations**: the vector and graph retrieval paths, and the architecture
+  graph's real data, are not exercised against a live Qdrant/Neo4j (Docker not
+  installed) -- verified instead via the SQLite-backed lexical/symbol paths and a
+  mocked-driver unit test for the graph-shaping logic. No demo/sample repository;
+  Code Explorer and Architecture Graph only show data for a repository you've
+  actually connected and indexed yourself.
 

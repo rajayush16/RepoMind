@@ -100,3 +100,30 @@ async def write_embeddings(
     except Exception as exc:  # noqa: BLE001
         logger.warning("embedding_write_failed", error=str(exc))
         return EmbeddingWriteResult(embeddings_written=0, skipped_reason=str(exc))
+
+
+async def search_similar(
+    settings: Settings,
+    provider: EmbeddingProvider,
+    repository_id: str,
+    query: str,
+    limit: int = 20,
+) -> list[dict]:
+    """Semantic search over a repository's indexed symbols. Raises on failure --
+    callers (hybrid_search) are expected to catch and treat this as best-effort."""
+    client = AsyncQdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key, timeout=10)
+
+    if not await client.collection_exists(COLLECTION_NAME):
+        return []
+
+    [query_vector] = await provider.embed([query])
+
+    hits = await client.query_points(
+        COLLECTION_NAME,
+        query=query_vector,
+        limit=limit,
+        query_filter=models.Filter(
+            must=[models.FieldCondition(key="repository_id", match=models.MatchValue(value=repository_id))]
+        ),
+    )
+    return [hit.payload for hit in hits.points]
