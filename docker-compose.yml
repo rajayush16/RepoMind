@@ -85,8 +85,17 @@ services:
       qdrant:
         condition: service_healthy
 
-  # frontend service is added once infrastructure/docker/frontend.Dockerfile lands
-  # (see IMPLEMENTATION_PLAN.md) to avoid referencing a Dockerfile that doesn't exist yet.
+  frontend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/frontend.Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
 
 volumes:
   postgres-data:
