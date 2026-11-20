@@ -50,6 +50,7 @@ Data ownership (no duplication of source of truth):
 
 - Node.js 20+ (developed against v22)
 - Python 3.12+
+- `git` CLI on PATH — the indexing pipeline shells out to it to clone repositories and list tracked files; it never executes anything from a cloned repo
 - Docker Desktop (for Postgres/Redis/Neo4j/Qdrant) — **not yet verified in this repo's primary dev environment**; see Troubleshooting.
 
 ### 1. Clone and configure environment
@@ -78,6 +79,14 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Health check: `GET http://localhost:8000/api/health` — reports the real connectivity status of each dependency (Postgres/Redis/Neo4j/Qdrant), not a hardcoded "ok".
+
+In a second terminal, start the Celery worker (required for `POST /repositories/{id}/index` to actually run — the route only enqueues the job):
+
+```bash
+cd backend
+. .venv/Scripts/activate
+celery -A app.workers.celery_app worker --loglevel=info
+```
 
 ### 4. Frontend
 
@@ -113,8 +122,10 @@ cd frontend && npm run lint && npm run build
 
 - **Docker not installed / `docker compose` not found**: install [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows and ensure the `docker` CLI is on PATH. Until then, the backend will boot but `/api/health` will report Postgres/Redis/Neo4j/Qdrant as `unreachable`.
 - **`/api/health` shows services as `unreachable`**: expected if the corresponding container/service isn't running. Start it with `docker compose up -d <service>` and retry.
-- **GitHub OAuth not working**: you must register a GitHub OAuth App and set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GITHUB_OAUTH_CALLBACK_URL` in `.env`. This integration is not implemented yet (see `IMPLEMENTATION_PLAN.md`, Phase 3).
-- **LLM features return errors**: at least one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` must be set, or `OLLAMA_BASE_URL` pointed at a running Ollama instance. This integration lands in Phase 6.
+- **GitHub OAuth not working**: register a GitHub OAuth App at <https://github.com/settings/developers> and set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GITHUB_OAUTH_CALLBACK_URL` in `.env`. The callback URL must point at the **backend** (`http://localhost:8000/api/auth/github/callback`), not the frontend.
+- **LLM features return errors**: at least one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` must be set, or `OLLAMA_BASE_URL` pointed at a running Ollama instance. The full provider-agnostic LLM abstraction lands in Phase 6.
+- **`POST /repositories/{id}/index` returns 503**: the Celery broker (Redis) or no worker process is running. Start Redis and the worker (see step 3 above).
+- **Indexing succeeds but shows 0 "graph relationships" or 0 "embeddings"**: expected when Neo4j isn't running or `OPENAI_API_KEY` isn't set — both are best-effort steps that never fail the job; the Postgres-backed file/symbol index (`file_count`/`symbol_count` on the repository) is what must succeed. Start Neo4j and/or set `OPENAI_API_KEY`, then re-index.
 
 ## Deployment
 

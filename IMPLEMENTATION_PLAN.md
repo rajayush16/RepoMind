@@ -45,16 +45,49 @@ Local dev environment note: Docker Desktop is not currently installed in the pri
       and callback logic are unit-tested with mocked GitHub responses)
 
 ## Phase 4 — Indexing Pipeline
-- [ ] Celery worker setup
-- [ ] Repository clone/fetch in controlled environment
-- [ ] File filtering (exclusions, size limits, .gitignore respect)
-- [ ] Tree-sitter AST parsing (Python, JS, TS, Java, C++, Go)
-- [ ] Symbol/import/call/inheritance extraction
-- [ ] PostgreSQL persistence of indexing metadata
-- [ ] Qdrant embedding storage
-- [ ] Neo4j graph construction
-- [ ] Indexing progress reporting (SSE/polling)
-- [ ] Incremental (commit-aware) re-indexing
+- [x] Celery worker setup (`app/workers/celery_app.py` + `tasks.py`, Redis broker;
+      verified the worker process boots and registers the `index_repository` task)
+- [x] Repository clone/fetch in a controlled environment (shallow `git clone` via
+      subprocess only -- never executes anything from the cloned repo; branch name
+      validated, tokens redacted from error messages, temp dir always cleaned up)
+- [x] File filtering (exclusion dirs/filenames, 1MB size limit, `.gitignore`
+      respected via `git ls-files`)
+- [x] Tree-sitter AST parsing for all 6 target languages (Python, JS, TS, Java,
+      C++, Go), via a pluggable per-language registry so more languages can be
+      added without touching the pipeline
+- [x] Symbol extraction (functions/methods/classes/interfaces/structs, with
+      parent/signature/line range) and import extraction for all 6 languages;
+      call extraction with best-effort syntactic (not fully semantic) caller
+      resolution
+- [x] PostgreSQL persistence of indexing metadata (`indexing_jobs`,
+      `indexed_files`, `code_symbols` -- see Alembic migration `a35bbb58389e`)
+- [x] Qdrant embedding storage (code written and real against a configured OpenAI
+      key; **not exercised** in this environment -- no `OPENAI_API_KEY` configured,
+      and no running Qdrant -- fails gracefully, job still succeeds, 0 embeddings
+      recorded honestly rather than faked)
+- [x] Neo4j graph construction (code written and real; **not exercised** in this
+      environment -- no running Neo4j -- fails gracefully, job still succeeds, 0
+      relationships recorded honestly rather than faked)
+- [x] Indexing progress reporting via polling (`GET
+      /repositories/{id}/indexing-jobs/latest`; frontend polls every 2s while a job
+      is queued/running)
+- [ ] True incremental (commit-diff-aware) re-indexing -- not implemented. Every
+      index/re-index currently does a full delete-and-reinsert of that repository's
+      `indexed_files`/`code_symbols` rows (and Neo4j subgraph), which is correct and
+      idempotent (verified: re-running produces no duplicate rows) but always
+      re-parses every file rather than only changed ones. The spec explicitly
+      allows full re-index as a fallback; recorded here as a real scope cut, not an
+      oversight.
+- [ ] Live end-to-end verification against real Postgres/Neo4j/Qdrant/Redis+worker
+      (blocked: Docker not installed locally). What **is** verified for real,
+      without any mocking, in this environment: git cloning a repository (against a
+      local git fixture, since there's no outbound network access here either),
+      `.gitignore`-respecting file filtering, Tree-sitter parsing for all 6
+      languages, and the full pipeline (clone → parse → persist → idempotent
+      re-index → failure handling) against an in-memory SQLite harness. GitHub API
+      calls and the Celery broker call are mocked in the relevant route/pipeline
+      tests; everything else in this phase is exercised against real local
+      processes (git, tree-sitter, a real Celery worker boot).
 
 ## Phase 5 — Code Intelligence
 - [ ] Code explorer (file tree, Monaco, symbol navigation)

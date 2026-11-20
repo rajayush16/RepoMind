@@ -141,10 +141,74 @@ Chronological record of feature-by-feature delivery. Each entry corresponds to o
   major version no longer exports a `Github` icon (replaced with a local inline SVG
   everywhere it was used), and `/login`'s `useSearchParams()` call needed a
   `Suspense` boundary (moved the page's content into `LoginForm` and wrapped it).
-- **Commit**: pending (written just before committing).
-- **Push status**: pending.
+- **Commit**: `ed299bb` — `feat: wire frontend to real auth, GitHub OAuth, and repositories API`
+- **Push status**: pushed to `origin/develop`.
 - **Limitations**: the full auth flow has not been exercised against a real running
   backend+Postgres+browser in this environment (Docker not installed); verified via
   `npm run build`/`lint` and by reading the request/response contract against the
   backend's own passing tests. No demo/workspace-switching UI yet.
+
+## 2026-11-20 — Backend: indexing pipeline (clone, Tree-sitter parsing, Celery, Neo4j/Qdrant best-effort)
+
+- **Summary**: The full Phase 4 indexing pipeline. A shallow `git clone` service
+  (subprocess only, branch name validated against a strict pattern, access tokens
+  redacted from any error output, temp dir always cleaned up). File filtering that
+  excludes common build/dependency/secret paths and respects `.gitignore` via `git
+  ls-files`. A pluggable Tree-sitter parsing registry covering all 6 target
+  languages (Python, JavaScript, TypeScript, Java, C++, Go) that extracts
+  functions/methods/classes/interfaces/structs (with parent/signature/line range),
+  imports, and best-effort syntactic call references. Three new Postgres tables
+  (`indexing_jobs`, `indexed_files`, `code_symbols`) with deterministic
+  `stable_symbol_id`s so re-indexing the same commit never creates duplicate rows.
+  A Celery app + thin task wrapper around the real orchestration function
+  (`run_indexing`), which the task just calls via `asyncio.run` -- the fat, testable
+  logic lives in a plain async function, not inside the Celery task itself. Neo4j
+  graph writing and Qdrant embedding writing (via a new `EmbeddingProvider`
+  abstraction, OpenAI-backed) are both best-effort: either being unreachable, or no
+  embedding provider being configured, is recorded honestly as 0 written / a skip
+  reason, and never fails the overall job -- only the Postgres symbol index has to
+  succeed. New endpoints: `POST /repositories/{id}/index` (enqueues the task, 409 if
+  already in progress, 503 if the broker is unreachable) and `GET
+  /repositories/{id}/indexing-jobs/latest` (for polling).
+- **Backend components added**: `models/indexing.py`
+  (IndexingJob/IndexedFile/CodeSymbol), `services/indexing/{clone,filters,
+  pipeline}.py`, `services/parsing/{types,languages,extractor}.py`,
+  `services/graph/builder.py`, `services/retrieval/qdrant_store.py`,
+  `services/llm/embeddings.py`, `workers/{celery_app,tasks}.py`, new routes on
+  `api/routes/repositories.py`, `core/exceptions.py` additions (`ConflictError`,
+  `ServiceUnavailableError`), Alembic migration `a35bbb58389e`.
+- **Frontend**: `lib/queries/indexing.ts` (polling hook with a 2s interval while a
+  job is queued/running), and `RepositoryCard` now has a real Index/Re-index button
+  with live progress and error display.
+- **Database**: `indexing_jobs`, `indexed_files`, `code_symbols` tables defined via
+  Alembic migration `a35bbb58389e`. **Not yet applied to a real Postgres instance**
+  (Docker still isn't installed here).
+- **Tests run**: `pytest` — 32 passed (18 new: 6 parsing tests covering real
+  Tree-sitter extraction for every target language with no mocking; 4 clone/filter
+  tests against a real local git fixture repo, including rejecting a malicious
+  `--upload-pack=` branch name; 3 full-pipeline tests -- clone→parse→persist,
+  idempotent re-index producing no duplicate rows, and failure handling -- against
+  the SQLite harness with only the clone source swapped to the local fixture; 5
+  route tests for trigger/conflict/broker-unavailable/polling with the Celery
+  `.delay()` call and GitHub API mocked). Also booted a real `celery -A
+  app.workers.celery_app worker` process and the real FastAPI server to confirm
+  both come up cleanly with every new route/task registered.
+  Caught and fixed three real bugs in this pass, none related to missing
+  infrastructure: (1) `redis==5.2.1` is incompatible with Celery 5.4.0's Redis
+  transport, which requires redis-py ≥6.1.0 -- the worker crashed with
+  `VersionMismatch` on startup; bumped to `redis==6.4.0`. (2) The Celery app never
+  imported `tasks.py`, so `index_repository` wasn't registered with the worker at
+  all (`[tasks]` printed empty) -- fixed via `include=["app.workers.tasks"]`. (3)
+  `shutil.rmtree(..., ignore_errors=True)` silently left cloned repos behind on
+  Windows because git marks pack files read-only; switched to an `onerror` handler
+  that clears the read-only bit and retries.
+- **Commit**: pending (written just before committing).
+- **Push status**: pending.
+- **Limitations**: no live verification against real Postgres, Neo4j, Qdrant, or
+  Redis+worker (Docker not installed); no outbound network access in this
+  environment either, so GitHub cloning was verified against a local git fixture
+  rather than a real GitHub repo, and GitHub API calls are mocked in tests. No
+  OpenAI API key configured, so embedding generation code is written but has never
+  actually produced an embedding. True incremental (commit-diff) re-indexing is not
+  implemented -- every run is a full re-index (idempotent, but not incremental).
 

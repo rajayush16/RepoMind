@@ -8,14 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_current_workspace, get_decrypted_github_token
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, NotFoundError, ServiceUnavailableError, ValidationError
+from app.models.indexing import IndexingJob, IndexingJobStatus
 from app.models.repository import Repository
 from app.models.user import User
 from app.models.workspace import Workspace
+from app.schemas.indexing import IndexingJobOut
 from app.schemas.repository import AvailableGithubRepo, ConnectRepositoryRequest, RepositoryOut
 from app.services.github.client import GithubApiError, list_user_repositories
+from app.workers.tasks import index_repository_task
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
+
+INDEXING_IN_PROGRESS_STATUSES = {"queued", "indexing"}
 
 
 @router.get("", response_model=list[RepositoryOut])
@@ -109,9 +114,68 @@ async def delete_repository(
     workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    repository = await db.get(Repository, repository_id)
-    if repository is None or repository.workspace_id != workspace.id:
-        raise NotFoundError("Repository not found.")
+    repository = await _get_owned_repository(db, workspace, repository_id)
 
     await db.delete(repository)
     await db.commit()
+
+
+async def _get_owned_repository(
+    db: AsyncSession, workspace: Workspace, repository_id: uuid.UUID
+) -> Repository:
+    repository = await db.get(Repository, repository_id)
+    if repository is None or repository.workspace_id != workspace.id:
+        raise NotFoundError("Repository not found.")
+    return repository
+
+
+@router.post("/{repository_id}/index", response_model=IndexingJobOut, status_code=202)
+async def trigger_indexing(
+    repository_id: uuid.UUID,
+    workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> IndexingJob:
+    repository = await _get_owned_repository(db, workspace, repository_id)
+
+    if repository.indexing_status in INDEXING_IN_PROGRESS_STATUSES:
+        raise ConflictError("This repository is already being indexed.")
+
+    job = IndexingJob(repository_id=repository.id)
+    repository.indexing_status = "queued"
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    try:
+        index_repository_task.delay(str(repository.id))
+    except Exception as exc:  # noqa: BLE001
+        job.status = IndexingJobStatus.FAILED
+        job.error_message = f"Could not reach the background task broker: {exc}"
+        repository.indexing_status = "failed"
+        await db.commit()
+        raise ServiceUnavailableError(
+            "The background indexing worker/broker is unavailable. "
+            "Make sure Redis and a Celery worker are running."
+        )
+
+    return job
+
+
+@router.get("/{repository_id}/indexing-jobs/latest", response_model=IndexingJobOut)
+async def latest_indexing_job(
+    repository_id: uuid.UUID,
+    workspace: Workspace = Depends(get_current_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> IndexingJob:
+    await _get_owned_repository(db, workspace, repository_id)
+
+    result = await db.execute(
+        select(IndexingJob)
+        .where(IndexingJob.repository_id == repository_id)
+        .order_by(IndexingJob.created_at.desc())
+        .limit(1)
+    )
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise NotFoundError("This repository has not been indexed yet.")
+    return job

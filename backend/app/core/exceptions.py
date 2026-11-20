@@ -34,5 +34,15 @@ class ValidationError(RepoMindError):
     detail = "Invalid request."
 
 
+class ConflictError(RepoMindError):
+    status_code = status.HTTP_409_CONFLICT
+    detail = "This operation conflicts with the resource's current state."
+
+
+class ServiceUnavailableError(RepoMindError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    detail = "A required background service is unavailable."
+
+
 async def repomind_exception_handler(request: Request, exc: RepoMindError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
